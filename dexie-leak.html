@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dexie Resource Leak Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>Dexie Connection Leak</h1>
+        <p class="subtitle">
+          Creating Dexie objects every millisecond without closing them
+          explicitly.
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          This repro creates a new Dexie instance every millisecond. These
+          instances go out of JavaScript scope are still reference by Dexie's
+          <a
+            href="https://github.com/dexie/Dexie.js/blob/d59cc44aaf8acba93503f620cfb0d81d003875c1/src/globals/constants.ts#L9"
+            >internal <code>connections</code> array</a
+          >.
+        </p>
+
+        <div style="margin-top: 2rem">
+          <button id="startBtn" class="btn">Start Leaking</button>
+          <button id="stopBtn" class="btn btn-secondary" disabled>Stop</button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Instances Created:</span>
+            <span class="status-value" id="instanceCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusText">Stopped</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      let intervalId = null;
+      let count = 0;
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const instanceCountEl = document.getElementById("instanceCount");
+      const statusTextEl = document.getElementById("statusText");
+
+      async function leak() {
+        const db = new Dexie("LeakDB");
+        db.version(1).stores({ data: "++id" });
+        db.open().catch((err) => {});
+
+        count++;
+
+        if (count % 10 === 0) {
+          instanceCountEl.innerText = count.toLocaleString();
+        }
+      }
+
+      startBtn.addEventListener("click", () => {
+        if (intervalId) return;
+
+        statusTextEl.innerText = "Leaking...";
+        statusTextEl.style.color = "#ff7b72";
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        intervalId = setInterval(leak, 1);
+      });
+
+      stopBtn.addEventListener("click", () => {
+        if (!intervalId) return;
+
+        clearInterval(intervalId);
+        intervalId = null;
+
+        statusTextEl.innerText = "Stopped";
+        statusTextEl.style.color = "";
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      });
+    </script>
+  </body>
+</html>

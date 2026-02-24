@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data URL Download Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>Data URL Download</h1>
+        <p class="subtitle">100MB download via data: URL link.</p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          Click the button below to dynamically generate a 100MB data: URL
+          download link.
+        </p>
+
+        <div style="margin-top: 2rem">
+          <button id="generateBtn" class="btn">Prepare 100MB Download</button>
+          <a id="downloadLink" class="btn btn-secondary" style="display: none"
+            >Download 100MB File</a
+          >
+        </div>
+
+        <div class="status-panel" id="statusPanel" style="display: none">
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusValue">Idle</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Size:</span>
+            <span class="status-value" id="sizeValue">0 MB</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const generateBtn = document.getElementById("generateBtn");
+      const downloadLink = document.getElementById("downloadLink");
+      const statusPanel = document.getElementById("statusPanel");
+      const statusValue = document.getElementById("statusValue");
+      const sizeValue = document.getElementById("sizeValue");
+
+      generateBtn.addEventListener("click", () => {
+        generateBtn.disabled = true;
+        generateBtn.innerText = "Generating...";
+        statusPanel.style.display = "block";
+        statusValue.innerText = "Allocating memory...";
+
+        // Give the UI a chance to update
+        setTimeout(() => {
+          const targetSize = 100 * 1024 * 1024; // 100MB
+          const chunk = "A".repeat(1024); // 1KB
+          let largeString = "";
+
+          for (let i = 0; i < targetSize / 1024; i++) {
+            largeString += chunk;
+          }
+
+          statusValue.innerText = "Creating Data URL...";
+
+          const dataUrl =
+            "data:text/plain;charset=utf-8," + encodeURIComponent(largeString);
+
+          downloadLink.href = dataUrl;
+          downloadLink.download = "large_repro_file.txt";
+          downloadLink.style.display = "inline-block";
+
+          statusValue.innerText = "Ready";
+          sizeValue.innerText =
+            (largeString.length / (1024 * 1024)).toFixed(2) + " MB";
+
+          generateBtn.innerText = "Regenerate";
+          generateBtn.disabled = false;
+        }, 100);
+      });
+    </script>
+  </body>
+</html>

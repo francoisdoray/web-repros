@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Large Blob Leak Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>Large Blob</h1>
+        <p class="subtitle">Memory usage in the browser process via a Blob</p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          Click "Create 100MB Blob" to allocate a new Blob and store it in a
+          global array. This keeps the memory allocated until you click "Release
+          All Blobs".
+        </p>
+
+        <div style="margin-top: 2rem">
+          <button id="createBtn" class="btn">Create 100MB Blob</button>
+          <button id="releaseBtn" class="btn btn-secondary">
+            Release All Blobs
+          </button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Active Blobs:</span>
+            <span class="status-value" id="blobCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Estimated Memory:</span>
+            <span class="status-value" id="memValue">0 MB</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const blobs = [];
+      const blobCountEl = document.getElementById("blobCount");
+      const memValueEl = document.getElementById("memValue");
+      const createBtn = document.getElementById("createBtn");
+      const releaseBtn = document.getElementById("releaseBtn");
+
+      function updateUI() {
+        blobCountEl.innerText = blobs.length;
+        memValueEl.innerText = blobs.length * 100 + " MB";
+      }
+
+      createBtn.addEventListener("click", () => {
+        // Create a 100MB buffer of data
+        const size = 100 * 1024 * 1024;
+        const buffer = new Uint8Array(size).fill(42); // Just some data
+
+        const blob = new Blob([buffer], { type: "application/octet-stream" });
+        blobs.push(blob);
+
+        updateUI();
+      });
+
+      releaseBtn.addEventListener("click", () => {
+        blobs.length = 0; // Clear the array
+        updateUI();
+      });
+    </script>
+  </body>
+</html>
