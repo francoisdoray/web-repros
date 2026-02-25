@@ -100,6 +100,7 @@ p.subtitle {
   border-color: var(--accent-color);
   background: var(--card-hover);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  text-decoration: none;
 }
 
 .card h2 {
@@ -155,6 +156,7 @@ footer {
 
 .back-link:hover {
   color: var(--accent-color);
+  text-decoration: none;
 }
 
 .back-link::before {

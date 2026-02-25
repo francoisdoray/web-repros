@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dexie BFCache Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <style>
+      .instruction-step {
+        margin-bottom: 1.5rem;
+        padding-left: 1.5rem;
+        border-left: 2px solid var(--accent-color);
+      }
+      .instruction-step h3 {
+        margin-top: 0;
+        color: var(--accent-color);
+        font-size: 1.1rem;
+      }
+      code.block {
+        display: block;
+        margin: 1rem 0;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>Dexie BFCache Interaction</h1>
+        <p class="subtitle">
+          Demonstrating that open IndexedDB connections don't necessarily block
+          BFCache.
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          By default, Dexie closes all connections on <code>pagehide</code> to
+          avoid blocking BFCache. This repro disables that behavior to show that
+          Chrome can still BFCache the page even with an open connection,
+          provided there are no version change or locking conflicts.
+        </p>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Dexie Connection:</span>
+            <span class="status-value" id="connectionStatus">Closed</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">BFCache Status (via DevTools):</span>
+            <span class="status-value" id="bfcacheStatus"
+              >Check Application Tab</span
+            >
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem">
+          <button id="openBtn" class="btn">Open Dexie Connection</button>
+          <button id="closeBtn" class="btn btn-secondary" disabled>
+            Close Connection
+          </button>
+        </div>
+
+        <hr
+          style="
+            margin: 3rem 0;
+            border: 0;
+            border-top: 1px solid var(--border-color);
+          "
+        />
+
+        <h2>How to Verify</h2>
+
+        <div class="instruction-step">
+          <h3>1. Open DevTools</h3>
+          <p>
+            Press <code>F12</code> or <code>Cmd+Option+I</code> to open Chrome
+            DevTools.
+          </p>
+        </div>
+
+        <div class="instruction-step">
+          <h3>2. Go to BFCache View</h3>
+          <p>
+            Navigate to <b>Application</b> &rarr; <b>Back/forward cache</b> (in
+            the left sidebar).
+          </p>
+        </div>
+
+        <div class="instruction-step">
+          <h3>3. Open Connection</h3>
+          <p>
+            Click the <b>Open Dexie Connection</b> button above. This script
+            runs:
+          </p>
+          <code class="block">
+            Dexie.disableBfCache = true;<br />
+            const db = new Dexie('BfCacheDB');<br />
+            db.version(1).stores({ items: '++id' });<br />
+            await db.open();
+          </code>
+        </div>
+
+        <div class="instruction-step">
+          <h3>4. Test BFCache</h3>
+          <p>
+            Click <b>Test back/forward cache</b> in the DevTools panel. This
+            will navigate away and back.
+          </p>
+          <p>
+            Observe that the page state is preserved and the connection remains
+            open (if restored from cache).
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      let db = null;
+      const openBtn = document.getElementById("openBtn");
+      const closeBtn = document.getElementById("closeBtn");
+      const connectionStatusEl = document.getElementById("connectionStatus");
+
+      // Disable Dexie's automatic cleanup for BFCache
+      Dexie.disableBfCache = true;
+
+      async function openConnection() {
+        try {
+          db = new Dexie("BfCacheDB");
+          db.version(1).stores({ items: "++id" });
+          await db.open();
+
+          connectionStatusEl.innerText = "Open";
+          connectionStatusEl.style.color = "#7ee787";
+          openBtn.disabled = true;
+          closeBtn.disabled = false;
+
+          console.log("Dexie connection opened. disableBfCache is true.");
+        } catch (err) {
+          console.error("Failed to open Dexie:", err);
+          connectionStatusEl.innerText = "Error: " + err.message;
+          connectionStatusEl.style.color = "#ff7b72";
+        }
+      }
+
+      function closeConnection() {
+        if (db) {
+          db.close();
+          db = null;
+          connectionStatusEl.innerText = "Closed";
+          connectionStatusEl.style.color = "";
+          openBtn.disabled = false;
+          closeBtn.disabled = true;
+        }
+      }
+
+      openBtn.addEventListener("click", openConnection);
+      closeBtn.addEventListener("click", closeConnection);
+
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted) {
+          console.log("Page restored from BFCache!");
+          // If restored from BFCache and we didn't close, it might still be "Open"
+          // in JS state if the object was preserved.
+          if (db && db.isOpen()) {
+            connectionStatusEl.innerText = "Open (Restored)";
+            connectionStatusEl.style.color = "#7ee787";
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
