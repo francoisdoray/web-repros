@@ -52,33 +52,38 @@
         generateBtn.disabled = true;
         generateBtn.innerText = "Generating...";
         statusPanel.style.display = "block";
-        statusValue.innerText = "Allocating memory...";
+        statusValue.innerText = "Creating Blob...";
 
         // Give the UI a chance to update
         setTimeout(() => {
           const targetSize = 100 * 1024 * 1024; // 100MB
-          const chunk = "A".repeat(1024); // 1KB
-          let largeString = "";
+          const buffer = new Uint8Array(targetSize).fill(65); // 'A'
 
-          for (let i = 0; i < targetSize / 1024; i++) {
-            largeString += chunk;
-          }
+          const blob = new Blob([buffer], { type: "text/plain;charset=utf-8" });
+          
+          statusValue.innerText = "Converting to Data URL...";
 
-          statusValue.innerText = "Creating Data URL...";
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            downloadLink.href = dataUrl;
+            downloadLink.download = "large_repro_file.txt";
+            downloadLink.style.display = "inline-block";
 
-          const dataUrl =
-            "data:text/plain;charset=utf-8," + encodeURIComponent(largeString);
+            statusValue.innerText = "Ready";
+            sizeValue.innerText =
+              (blob.size / (1024 * 1024)).toFixed(2) + " MB";
 
-          downloadLink.href = dataUrl;
-          downloadLink.download = "large_repro_file.txt";
-          downloadLink.style.display = "inline-block";
+            generateBtn.innerText = "Regenerate";
+            generateBtn.disabled = false;
+          };
 
-          statusValue.innerText = "Ready";
-          sizeValue.innerText =
-            (largeString.length / (1024 * 1024)).toFixed(2) + " MB";
+          reader.onerror = () => {
+            statusValue.innerText = "Error generating Data URL";
+            generateBtn.disabled = false;
+          };
 
-          generateBtn.innerText = "Regenerate";
-          generateBtn.disabled = false;
+          reader.readAsDataURL(blob);
         }, 100);
       });
     </script>
