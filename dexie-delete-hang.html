@@ -79,7 +79,7 @@
             db3.close();
 
             // 4. Delete databases
-            await Promise.all([db1.delete(), db2.delete(), db3.delete()]);
+            await Promise.all([Dexie.delete("HangDB1"), Dexie.delete("HangDB2"), Dexie.delete("HangDB3")]);
           </code>
         </div>
 
@@ -118,7 +118,7 @@
 
           // 4. Delete databases
           console.log("Deleting databases...");
-          await Promise.all([db1.delete(), db2.delete(), db3.delete()]);
+          await Promise.all([Dexie.delete("HangDB1"), Dexie.delete("HangDB2"), Dexie.delete("HangDB3")]);
 
           // 5. Report success
           statusEl.innerText = "Databases successfully deleted!";
