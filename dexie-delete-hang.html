@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dexie Delete Hang</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <style>
+      .instruction-step {
+        margin-bottom: 1.5rem;
+        padding-left: 1.5rem;
+        border-left: 2px solid var(--accent-color);
+      }
+      .instruction-step h3 {
+        margin-top: 0;
+        color: var(--accent-color);
+        font-size: 1.1rem;
+      }
+      code.block {
+        display: block;
+        margin: 1rem 0;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>Dexie Delete Hang</h1>
+        <p class="subtitle">
+          Demonstrating a hang when creating, opening, closing, and deleting databases in sequence.
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          This repro establishes a sequence: creating three separate databases, opening them, closing them, and finally deleting them. When run, this is expected to hang.
+        </p>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="status">Ready to start</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem">
+          <button id="runBtn" class="btn">Run Repro</button>
+        </div>
+
+        <hr
+          style="
+            margin: 3rem 0;
+            border: 0;
+            border-top: 1px solid var(--border-color);
+          "
+        />
+
+        <h2>What this script does</h2>
+
+        <div class="instruction-step">
+          <h3>Sequence</h3>
+          <code class="block">
+            // 1. Create 3 Dexie objects
+            const db1 = new Dexie("HangDB1");
+            db1.version(1).stores({foo: 'id'});
+            // ... db2, db3
+
+            // 2. Open databases
+            await Promise.all([db1.open(), db2.open(), db3.open()]);
+
+            // 3. Close databases
+            db1.close();
+            db2.close();
+            db3.close();
+
+            // 4. Delete databases
+            await Promise.all([db1.delete(), db2.delete(), db3.delete()]);
+          </code>
+        </div>
+
+      </section>
+    </div>
+
+    <script>
+      const runBtn = document.getElementById("runBtn");
+      const statusEl = document.getElementById("status");
+
+      async function runRepro() {
+        runBtn.disabled = true;
+        statusEl.innerText = "Running...";
+        statusEl.style.color = "#f2cc60"; // warning color
+
+        try {
+          // 1. Create 3 Dexie objects
+          const db1 = new Dexie("HangDB1");
+          db1.version(1).stores({foo: 'id'});
+          
+          const db2 = new Dexie("HangDB2");
+          db2.version(1).stores({foo: 'id'});
+          
+          const db3 = new Dexie("HangDB3");
+          db3.version(1).stores({foo: 'id'});
+
+          // 2. Open databases
+          console.log("Opening databases...");
+          await Promise.all([db1.open(), db2.open(), db3.open()]);
+
+          // 3. Close databases
+          console.log("Closing databases...");
+          db1.close();
+          db2.close();
+          db3.close();
+
+          // 4. Delete databases
+          console.log("Deleting databases...");
+          await Promise.all([db1.delete(), db2.delete(), db3.delete()]);
+
+          // 5. Report success
+          statusEl.innerText = "Databases successfully deleted!";
+          statusEl.style.color = "#7ee787"; // success color
+          console.log("Done.");
+        } catch (err) {
+          statusEl.innerText = "Error: " + err.message;
+          statusEl.style.color = "#ff7b72"; // error color
+          console.error(err);
+        } finally {
+          // Keep it disabled to force refresh or maybe let me run again?
+          // I will re-enable so it isn't completely disabled on fail.
+          runBtn.disabled = false;
+        }
+      }
+
+      runBtn.addEventListener("click", runRepro);
+    </script>
+  </body>
+</html>
