@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IndexedDB Orphaned Data Leak Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>IndexedDB Orphaned Data Leak</h1>
+        <p class="subtitle">
+          Generating massive "ghost" data by race-conditions during database
+          deletion
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          This repro simulates a race condition where high-frequency database creation
+          and writes followed by periodic deletions cause <code>LevelDBScopes</code> 
+          to leak orphaned data on disk.
+        </p>
+        <p>
+          <strong>To trigger the leak:</strong> Click "Start Leaking". Every minute,
+          the script will pause, delete all databases it created, and wait 10 seconds 
+          for the browser's quota accounting to settle. The residual usage 
+          (the "amount leaked") will be logged below.
+        </p>
+        <div style="margin-top: 2rem">
+          <button id="startBtn" class="btn">Start Leaking</button>
+          <button id="stopBtn" class="btn btn-secondary" disabled>Stop</button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusField">Idle</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Cycles:</span>
+            <span class="status-value" id="cycleCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Current Usage:</span>
+            <span class="status-value" id="quotaUsage">Calculating...</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 2rem">
+          <h3>Leak Log</h3>
+          <div id="leakLog" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: auto; font-size: 0.9rem;">
+            <div>[No logs yet]</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      let isRunning = false;
+      let isSyncing = false;
+      let cycleCount = 0;
+      let lastLeakedValue = 0;
+      const MAX_PARALLEL_DBS = 10;
+      const DB_NAME_PREFIX = "orphan_leak_db_";
+      const SYNC_INTERVAL_MS = 60 * 1000;
+
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const statusField = document.getElementById("statusField");
+      const cycleCountEl = document.getElementById("cycleCount");
+      const quotaUsageEl = document.getElementById("quotaUsage");
+      const leakLog = document.getElementById("leakLog");
+
+      function log(msg) {
+        const div = document.createElement("div");
+        div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        leakLog.appendChild(div);
+        leakLog.scrollTop = leakLog.scrollHeight;
+        if (leakLog.children[0] && leakLog.children[0].innerText === "[No logs yet]") {
+          leakLog.removeChild(leakLog.children[0]);
+        }
+      }
+
+      async function updateQuota() {
+        if (!navigator.storage || !navigator.storage.estimate) {
+          quotaUsageEl.innerText = "Quota API not supported";
+          return 0;
+        }
+        const estimate = await navigator.storage.estimate();
+        const usageMB = (estimate.usage / (1024 * 1024)).toFixed(2);
+        quotaUsageEl.innerText = usageMB + " MB";
+        return parseFloat(usageMB);
+      }
+
+      setInterval(updateQuota, 2000);
+
+      async function runLeakingCycle() {
+        if (!isRunning || isSyncing) return;
+
+        cycleCount++;
+        cycleCountEl.innerText = cycleCount;
+        statusField.innerText = "Churning...";
+
+        const promises = [];
+        for (let i = 0; i < MAX_PARALLEL_DBS; i++) {
+          // Deterministic name based on cycle and index
+          const dbName = `${DB_NAME_PREFIX}${i}_${cycleCount}`;
+          promises.push(doLeakyOperation(dbName));
+        }
+
+        await Promise.allSettled(promises);
+        
+        if (isRunning && !isSyncing) {
+          setTimeout(runLeakingCycle, 10);
+        }
+      }
+
+      function doLeakyOperation(name) {
+        return new Promise((resolve) => {
+          const request = indexedDB.open(name, 1);
+          
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            db.createObjectStore("data");
+          };
+
+          request.onsuccess = (e) => {
+            const db = e.target.result;
+            const transaction = db.transaction("data", "readwrite");
+            const store = transaction.objectStore("data");
+            
+            // Deterministic payload: 20 keys x 100KB = 2MB
+            const payloadSize = 100 * 1024;
+            const keyCount = 20;
+            for (let k = 0; k < keyCount; k++) {
+              const largeData = new Uint8Array(payloadSize).fill(k % 256);
+              try {
+                store.put(largeData, `item_${k}`);
+              } catch (err) {}
+            }
+
+            // High probability of immediate close/delete (deterministic 50ms) to interrupt cleanup
+            setTimeout(() => {
+              try {
+                db.close();
+              } catch (e) {}
+              const deleteReq = indexedDB.deleteDatabase(name);
+              deleteReq.onsuccess = () => resolve();
+              deleteReq.onerror = () => resolve();
+            }, 50);
+          };
+
+          request.onerror = () => resolve();
+        });
+      }
+
+      async function performSyncPoint() {
+        if (!isRunning) return;
+        isSyncing = true;
+        statusField.innerText = "Deleting all databases...";
+        log("Deleting all databases...");
+
+        // 1. Delete all known databases
+        const databases = await indexedDB.databases();
+        const promises = databases.map(db => {
+          if (db.name.startsWith(DB_NAME_PREFIX)) {
+            return new Promise(resolve => {
+              const req = indexedDB.deleteDatabase(db.name);
+              req.onsuccess = resolve;
+              req.onerror = resolve;
+            });
+          }
+        });
+        await Promise.allSettled(promises);
+
+        // 2. Wait 10 seconds for quota to settle
+        statusField.innerText = "Waiting 10s for quota to settle...";
+        await new Promise(r => setTimeout(r, 10000));
+
+        // 3. Log amount leaked
+        const currentUsage = await updateQuota();
+        log(`Quota used after deleting all databases and waiting 10 seconds: ${currentUsage.toFixed(2)} MB`);
+        
+        isSyncing = false;
+        if (isRunning) {
+          runLeakingCycle();
+          // Schedule next sync
+          setTimeout(performSyncPoint, SYNC_INTERVAL_MS);
+        }
+      }
+
+      startBtn.addEventListener("click", () => {
+        isRunning = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        log("Started leaking process.");
+        runLeakingCycle();
+        setTimeout(performSyncPoint, SYNC_INTERVAL_MS);
+      });
+
+      stopBtn.addEventListener("click", () => {
+        isRunning = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        statusField.innerText = "Idle";
+        log("Stopped leaking process.");
+      });
+    </script>
+
+  </body>
+</html>
