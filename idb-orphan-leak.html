@@ -50,6 +50,17 @@
           </div>
         </div>
 
+        <div style="margin-top: 2rem; padding: 1rem; border: 1px solid #444; border-radius: 8px;">
+          <h3>Database Tools</h3>
+          <p>
+            <strong>Fill IndexedDB:</strong> This will create 10 databases with 200,000 keys each. 
+            Filling the database slows down <code>CompactRange</code> and exacerbates the problem. 
+            You only need to do this once (once filled, you can run the leak test as much as you want).
+          </p>
+          <button id="fillBtn" class="btn btn-secondary">Fill IndexedDB</button>
+          <button id="clearAllBtn" class="btn btn-secondary" style="margin-left: 0.5rem; background: #c53030;">Clean Up All Databases</button>
+        </div>
+
         <div style="margin-top: 2rem">
           <h3>Leak Log</h3>
           <div id="leakLog" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: auto; font-size: 0.9rem;">
@@ -70,6 +81,8 @@
 
       const startBtn = document.getElementById("startBtn");
       const stopBtn = document.getElementById("stopBtn");
+      const fillBtn = document.getElementById("fillBtn");
+      const clearAllBtn = document.getElementById("clearAllBtn");
       const statusField = document.getElementById("statusField");
       const cycleCountEl = document.getElementById("cycleCount");
       const quotaUsageEl = document.getElementById("quotaUsage");
@@ -208,6 +221,81 @@
         stopBtn.disabled = true;
         statusField.innerText = "Idle";
         log("Stopped leaking process.");
+      });
+
+      fillBtn.addEventListener("click", async () => {
+        fillBtn.disabled = true;
+        log("🚀 Starting database fill: 10 databases, 200,000 keys each...");
+        
+        const NUM_DBS = 10;
+        const KEYS_PER_DB = 200000;
+        const BATCH_SIZE = 10000;
+        const NAME_PREFIX = "stress_db_";
+        
+        try {
+          for (let i = 0; i < NUM_DBS; i++) {
+            const dbName = `${NAME_PREFIX}${i}`;
+            log(`[${i + 1}/${NUM_DBS}] Opening ${dbName}...`);
+            
+            const db = await new Promise((resolve, reject) => {
+              const request = indexedDB.open(dbName, 1);
+              request.onupgradeneeded = () => request.result.createObjectStore('data');
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            });
+            
+            for (let j = 0; j < KEYS_PER_DB; j += BATCH_SIZE) {
+              await new Promise((resolve, reject) => {
+                const tx = db.transaction('data', 'readwrite');
+                const store = tx.objectStore('data');
+                const end = Math.min(j + BATCH_SIZE, KEYS_PER_DB);
+                
+                for (let k = j; k < end; k++) {
+                  store.put(`value-${k}-padding-to-ensure-some-size`, k);
+                }
+                
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(new Error('Transaction aborted'));
+              });
+              
+              if (j > 0 && j % (BATCH_SIZE * 5) === 0) {
+                log(`  ... ${j} keys inserted in ${dbName}`);
+              }
+            }
+            db.close();
+            log(` ✅ Finished ${dbName}`);
+          }
+          log('🏁 Database fill complete.');
+        } catch (err) {
+          log(`❌ Error during fill: ${err}`);
+        } finally {
+          fillBtn.disabled = false;
+        }
+      });
+
+      clearAllBtn.addEventListener("click", async () => {
+        if (!confirm("This will delete ALL IndexedDB databases for this origin. Continue?")) return;
+        
+        clearAllBtn.disabled = true;
+        log("Cleaning up all databases...");
+        
+        try {
+          const databases = await indexedDB.databases();
+          const promises = databases.map(db => {
+            return new Promise(resolve => {
+              const req = indexedDB.deleteDatabase(db.name);
+              req.onsuccess = resolve;
+              req.onerror = resolve;
+            });
+          });
+          await Promise.allSettled(promises);
+          log("✅ All databases cleaned up.");
+        } catch (err) {
+          log(`❌ Error during cleanup: ${err}`);
+        } finally {
+          clearAllBtn.disabled = false;
+        }
       });
     </script>
 
