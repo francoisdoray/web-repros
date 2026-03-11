@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AudioContext Leak Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>AudioContext Leak</h1>
+        <p class="subtitle">
+          Creating new AudioContext objects without explicitly closing them.
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          This repro exposes two problems with <code>AudioContext</code>:
+        </p>
+        <ol>
+          <li>
+            <strong>CPU Spike:</strong> Creating even a single AudioContext uses CPU.
+            (Check Task Manager when creating one.)
+          </li>
+          <li>
+            <strong>OOM Crash:</strong> Calling <code>new AudioContext()</code> repeatedly
+            will quickly crash the tab. An AudioContext uses memory even if not explicitly
+            retained by the page, and must be closed explicitly.
+          </li>
+        </ol>
+
+        <div style="margin-top: 2rem; display: flex; gap: 10px;">
+          <button id="singleBtn" class="btn">Create Single AudioContext</button>
+          <button id="startBtn" class="btn">Start Leaking (OOM)</button>
+          <button id="stopBtn" class="btn btn-secondary" disabled>Stop</button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Instances Created:</span>
+            <span class="status-value" id="instanceCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusText">Stopped</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      let intervalId = null;
+      let count = 0;
+      const singleBtn = document.getElementById("singleBtn");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const instanceCountEl = document.getElementById("instanceCount");
+      const statusTextEl = document.getElementById("statusText");
+
+      function createSingle() {
+        // Create an AudioContext without retaining it or explicitly closing it.
+        new AudioContext();
+        
+        count++;
+        instanceCountEl.innerText = count.toLocaleString();
+        
+        // Show status change briefly or permanently
+        statusTextEl.innerText = "Single AudioContext Created";
+      }
+
+      function leak() {
+        // We create an AudioContext but do not retain it or close it explicitly.
+        new AudioContext();
+
+        count++;
+
+        if (count % 10 === 0) {
+          instanceCountEl.innerText = count.toLocaleString();
+        }
+      }
+
+      singleBtn.addEventListener("click", () => {
+        createSingle();
+      });
+
+      startBtn.addEventListener("click", () => {
+        if (intervalId) return;
+
+        statusTextEl.innerText = "Leaking...";
+        statusTextEl.style.color = "#ff7b72";
+        singleBtn.disabled = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        intervalId = setInterval(leak, 1);
+      });
+
+      stopBtn.addEventListener("click", () => {
+        if (!intervalId) return;
+
+        clearInterval(intervalId);
+        intervalId = null;
+
+        statusTextEl.innerText = "Stopped";
+        statusTextEl.style.color = "";
+        singleBtn.disabled = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      });
+    </script>
+  </body>
+</html>
