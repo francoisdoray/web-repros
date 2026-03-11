@@ -19,53 +19,73 @@
       </header>
 
       <section class="repro-container">
-        <p>
-          This repro simulates a race condition where high-frequency database creation
-          and writes followed by periodic deletions cause <code>LevelDBScopes</code> 
-          to leak orphaned data on disk.
-        </p>
-        <p>
-          <strong>To trigger the leak:</strong> Click "Start Leaking". Every minute,
-          the script will pause, delete all databases it created, and wait 10 seconds 
-          for the browser's quota accounting to settle. The residual usage 
-          (the "amount leaked") will be logged below.
-        </p>
-        <div style="margin-top: 2rem">
-          <button id="startBtn" class="btn">Start Leaking</button>
-          <button id="stopBtn" class="btn btn-secondary" disabled>Stop</button>
-        </div>
-
-        <div class="status-panel">
-          <div class="status-item">
-            <span class="status-label">Status:</span>
-            <span class="status-value" id="statusField">Idle</span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">Cycles:</span>
-            <span class="status-value" id="cycleCount">0</span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">Current Usage:</span>
-            <span class="status-value" id="quotaUsage">Calculating...</span>
-          </div>
-        </div>
-
-        <div style="margin-top: 2rem; padding: 1rem; border: 1px solid #444; border-radius: 8px;">
-          <h3>Database Tools</h3>
+        <!-- Step 1: Fill Database -->
+        <div class="step-card" style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #444; border-radius: 8px; background: #252525;">
+          <h2>Step 1: Fill Database</h2>
           <p>
-            <strong>Fill IndexedDB:</strong> This will create 10 databases with 200,000 keys each. 
-            Filling the database slows down <code>CompactRange</code> and exacerbates the problem. 
-            You only need to do this once (once filled, you can run the leak test as much as you want).
+            Suggested to make the <code>CompactRange</code> that happens as part of <code>deleteDatabase</code> slower.
+            Filling the database with 10 databases of 200,000 keys each increases disk usage by ~2GB.
+            You only need to do this once.
           </p>
           <button id="fillBtn" class="btn btn-secondary">Fill IndexedDB</button>
-          <button id="clearAllBtn" class="btn btn-secondary" style="margin-left: 0.5rem; background: #c53030;">Clean Up All Databases</button>
         </div>
 
+        <!-- Step 2: Leak Test -->
+        <div class="step-card" style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #444; border-radius: 8px; background: #252525;">
+          <h2>Step 2: Leak Test</h2>
+          <p>
+            Trigger the race condition by clicking "Start Leaking". Every minute, the script will pause, 
+            delete all databases, and wait 10s for quota to settle.
+          </p>
+          <div style="margin: 1.5rem 0">
+            <button id="startBtn" class="btn">Start Leaking</button>
+            <button id="stopBtn" class="btn btn-secondary" disabled>Stop</button>
+          </div>
+
+          <div class="status-panel">
+            <div class="status-item">
+              <span class="status-label">Status:</span>
+              <span class="status-value" id="statusField">Idle</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Cycles:</span>
+              <span class="status-value" id="cycleCount">0</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Current Usage:</span>
+              <span class="status-value" id="quotaUsage">Calculating...</span>
+            </div>
+          </div>
+
+          <div class="status-panel" style="margin-top: 1rem; border-top: 1px solid #444; padding-top: 1rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+            <div class="status-item">
+              <span class="status-label">Avg Open:</span>
+              <span class="status-value" id="avgOpen">0ms</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Avg Put:</span>
+              <span class="status-value" id="avgPut">0ms</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Avg Delete:</span>
+              <span class="status-value" id="avgDelete">0ms</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leak Log -->
         <div style="margin-top: 2rem">
           <h3>Leak Log</h3>
-          <div id="leakLog" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: monospace; height: 200px; overflow-y: auto; font-size: 0.9rem;">
+          <div id="leakLog" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: monospace; height: 250px; overflow-y: auto; font-size: 0.9rem;">
             <div>[No logs yet]</div>
           </div>
+        </div>
+
+        <!-- Cleanup -->
+        <div style="margin-top: 3rem; padding: 1.5rem; border: 1px dashed #c53030; border-radius: 8px;">
+          <h3>Cleanup</h3>
+          <p>Cleanup all state after you're done with the test.</p>
+          <button id="clearAllBtn" class="btn btn-secondary" style="background: #c53030;">Clean Up All Databases</button>
         </div>
       </section>
     </div>
@@ -79,6 +99,13 @@
       const DB_NAME_PREFIX = "orphan_leak_db_";
       const SYNC_INTERVAL_MS = 60 * 1000;
 
+      // Latency tracking
+      const latencies = {
+        open: { total: 0, count: 0 },
+        put: { total: 0, count: 0 },
+        delete: { total: 0, count: 0 }
+      };
+
       const startBtn = document.getElementById("startBtn");
       const stopBtn = document.getElementById("stopBtn");
       const fillBtn = document.getElementById("fillBtn");
@@ -87,6 +114,9 @@
       const cycleCountEl = document.getElementById("cycleCount");
       const quotaUsageEl = document.getElementById("quotaUsage");
       const leakLog = document.getElementById("leakLog");
+      const avgOpenEl = document.getElementById("avgOpen");
+      const avgPutEl = document.getElementById("avgPut");
+      const avgDeleteEl = document.getElementById("avgDelete");
 
       function log(msg) {
         const div = document.createElement("div");
@@ -95,6 +125,18 @@
         leakLog.scrollTop = leakLog.scrollHeight;
         if (leakLog.children[0] && leakLog.children[0].innerText === "[No logs yet]") {
           leakLog.removeChild(leakLog.children[0]);
+        }
+      }
+
+      function updateLatencyDisplay() {
+        if (latencies.open.count > 0) {
+          avgOpenEl.innerText = (latencies.open.total / latencies.open.count).toFixed(1) + "ms";
+        }
+        if (latencies.put.count > 0) {
+          avgPutEl.innerText = (latencies.put.total / latencies.put.count).toFixed(1) + "ms";
+        }
+        if (latencies.delete.count > 0) {
+          avgDeleteEl.innerText = (latencies.delete.total / latencies.delete.count).toFixed(1) + "ms";
         }
       }
 
@@ -120,12 +162,12 @@
 
         const promises = [];
         for (let i = 0; i < MAX_PARALLEL_DBS; i++) {
-          // Deterministic name based on cycle and index
           const dbName = `${DB_NAME_PREFIX}${i}_${cycleCount}`;
           promises.push(doLeakyOperation(dbName));
         }
 
         await Promise.allSettled(promises);
+        updateLatencyDisplay();
         
         if (isRunning && !isSyncing) {
           setTimeout(runLeakingCycle, 10);
@@ -134,6 +176,7 @@
 
       function doLeakyOperation(name) {
         return new Promise((resolve) => {
+          const startTimeOpen = performance.now();
           const request = indexedDB.open(name, 1);
           
           request.onupgradeneeded = (e) => {
@@ -142,7 +185,12 @@
           };
 
           request.onsuccess = (e) => {
+            const durationOpen = performance.now() - startTimeOpen;
+            latencies.open.total += durationOpen;
+            latencies.open.count++;
+
             const db = e.target.result;
+            const startTimePut = performance.now();
             const transaction = db.transaction("data", "readwrite");
             const store = transaction.objectStore("data");
             
@@ -156,15 +204,34 @@
               } catch (err) {}
             }
 
-            // High probability of immediate close/delete (deterministic 50ms) to interrupt cleanup
-            setTimeout(() => {
-              try {
-                db.close();
-              } catch (e) {}
-              const deleteReq = indexedDB.deleteDatabase(name);
-              deleteReq.onsuccess = () => resolve();
-              deleteReq.onerror = () => resolve();
-            }, 50);
+            transaction.oncomplete = () => {
+              const durationPut = performance.now() - startTimePut;
+              latencies.put.total += durationPut;
+              latencies.put.count++;
+              
+              // High probability of immediate close/delete (deterministic 50ms) to interrupt cleanup
+              setTimeout(() => {
+                try {
+                  db.close();
+                } catch (e) {}
+                
+                const startTimeDelete = performance.now();
+                const deleteReq = indexedDB.deleteDatabase(name);
+                deleteReq.onsuccess = () => {
+                  const durationDelete = performance.now() - startTimeDelete;
+                  latencies.delete.total += durationDelete;
+                  latencies.delete.count++;
+                  resolve();
+                };
+                deleteReq.onerror = (err) => {
+                  console.error(`deleteDatabase onerror for ${name}:`, err, deleteReq.error);
+                  resolve();
+                };
+              }, 50);
+            };
+            
+            transaction.onerror = () => resolve();
+            transaction.onabort = () => resolve();
           };
 
           request.onerror = () => resolve();
@@ -177,7 +244,6 @@
         statusField.innerText = "Deleting all databases...";
         log("Deleting all databases...");
 
-        // 1. Delete all known databases
         const databases = await indexedDB.databases();
         const promises = databases.map(db => {
           if (db.name.startsWith(DB_NAME_PREFIX)) {
@@ -190,18 +256,15 @@
         });
         await Promise.allSettled(promises);
 
-        // 2. Wait 10 seconds for quota to settle
         statusField.innerText = "Waiting 10s for quota to settle...";
         await new Promise(r => setTimeout(r, 10000));
 
-        // 3. Log amount leaked
         const currentUsage = await updateQuota();
         log(`Quota used after deleting all databases and waiting 10 seconds: ${currentUsage.toFixed(2)} MB`);
         
         isSyncing = false;
         if (isRunning) {
           runLeakingCycle();
-          // Schedule next sync
           setTimeout(performSyncPoint, SYNC_INTERVAL_MS);
         }
       }
