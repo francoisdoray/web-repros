@@ -108,7 +108,7 @@
       
       const MAX_PARALLEL_DBS = 10;
       const DB_NAME_PREFIX = "orphan_leak_db_";
-      const STRESS_DB_PREFIX = "stress_db_";
+      const FILL_DB_PREFIX = "fill_db_";
       const SYNC_INTERVAL_MS = 60 * 1000;
 
       // Tracking performance metrics for the status panel
@@ -223,7 +223,7 @@
           });
           
           const inserted = Math.min(j + batchSize, totalKeys);
-          if (inserted > 0 && inserted % (batchSize * 5) === 0) {
+          if (inserted > 0 && (inserted % (batchSize * 5) === 0 || inserted === totalKeys)) {
             log(`  ... ${inserted} keys inserted in ${dbName}`);
           }
         }
@@ -405,7 +405,7 @@
         
         try {
           for (let i = 0; i < NUM_DBS; i++) {
-            const dbName = `${STRESS_DB_PREFIX}${i}`;
+            const dbName = `${FILL_DB_PREFIX}${i}`;
             log(`[${i + 1}/${NUM_DBS}] Opening ${dbName}...`);
             
             const db = await new Promise((resolve, reject) => {
