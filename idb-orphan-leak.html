@@ -34,8 +34,18 @@
         <div class="step-card" style="margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #444; border-radius: 8px; background: #252525;">
           <h2>Step 2: Leak Test</h2>
           <p>
-            Trigger the race condition by clicking "Start Leaking". Every minute, the script will pause, 
-            delete all databases, and wait 10s for quota to settle.
+            Trigger the race condition by clicking "Start Leaking". This starts a high-frequency loop that:
+          </p>
+          <ul style="margin: 1rem 0; padding-left: 1.5rem; color: #d4d4d4;">
+            <li>Opens <strong>10 unique databases</strong> in parallel.</li>
+            <li>Fills each with <strong>2MB of data</strong> (20 keys of 100KB).</li>
+            <li>Waits exactly <strong>50ms</strong> after the transaction completes.</li>
+            <li>Immediately <strong>closes and deletes</strong> each database.</li>
+          </ul>
+          <p>
+            This timing is intended to interrupt background cleanup tasks (LevelDB Scopes) during database deletion, 
+            which can lead to orphaned "ghost" data. Every 60s, the script will pause, 
+            delete all databases, and wait 10s to check the residual quota.
           </p>
           <div style="margin: 1.5rem 0">
             <button id="startBtn" class="btn">Start Leaking</button>
