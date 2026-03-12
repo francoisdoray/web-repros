@@ -43,9 +43,7 @@
             <li>Immediately <strong>closes and deletes</strong> each database.</li>
           </ul>
           <p>
-            This timing is intended to interrupt background cleanup tasks (LevelDB Scopes) during database deletion, 
-            which can lead to orphaned "ghost" data. Every 60s, the script will pause, 
-            delete all databases, and wait 10s to check the residual quota.
+            Every 60s, the script will pause, delete all leak test databases, and wait 10s to check the residual quota.
           </p>
           <div style="margin: 1.5rem 0">
             <button id="startBtn" class="btn">Start Leaking</button>
@@ -209,7 +207,7 @@
       /**
        * Fills a database in batches to support very large datasets without blocking the main thread too much.
        */
-      async function batchFillObjectStore(db, storeName, totalKeys, batchSize) {
+      async function batchFillObjectStore(dbName, db, storeName, totalKeys, batchSize) {
         for (let j = 0; j < totalKeys; j += batchSize) {
           await new Promise((resolve, reject) => {
             const tx = db.transaction(storeName, 'readwrite');
@@ -224,8 +222,9 @@
             tx.onerror = () => reject(tx.error);
           });
           
-          if (j > 0 && j % (batchSize * 5) === 0) {
-            log(`  ... ${j} keys inserted`);
+          const inserted = Math.min(j + batchSize, totalKeys);
+          if (inserted > 0 && inserted % (batchSize * 5) === 0) {
+            log(`  ... ${inserted} keys inserted in ${dbName}`);
           }
         }
       }
@@ -244,6 +243,21 @@
               req.onerror = resolve;
             });
           });
+        return Promise.allSettled(promises);
+      }
+
+      /**
+       * Deletes all databases for the origin (used for complete cleanup).
+       */
+      async function deleteAllDatabases() {
+        const databases = await indexedDB.databases();
+        const promises = databases.map(db => {
+          return new Promise(resolve => {
+            const req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = resolve;
+            req.onerror = resolve;
+          });
+        });
         return Promise.allSettled(promises);
       }
 
@@ -307,7 +321,7 @@
               await fillObjectStore(db, "data", 20, 100 * 1024);
 
               // Wait exactly 50ms before deleting. This is the critical window where background 
-              // cleanup tasks (Mojo/LevelDB scopes) are often still running in the browser.
+              // cleanup tasks (LevelDB scopes) are often still running in the browser process.
               setTimeout(() => {
                 try {
                   db.close();
@@ -321,7 +335,10 @@
                   latencies.delete.count++;
                   resolve();
                 };
-                deleteReq.onerror = () => resolve();
+                deleteReq.onerror = (err) => {
+                  console.error(`deleteDatabase onerror for ${name}:`, err, deleteReq.error);
+                  resolve();
+                };
               }, 50);
             } catch (err) {
               resolve();
@@ -339,8 +356,8 @@
         if (!isRunning) return;
         isSyncing = true;
         
-        statusField.innerText = "Deleting all databases...";
-        log("Performing sync point (global cleanup)...");
+        statusField.innerText = "Deleting leak test databases...";
+        log("Performing sync point (cleaning up leak test databases)...");
 
         await deleteDatabasesByPrefix(DB_NAME_PREFIX);
 
@@ -398,7 +415,7 @@
               request.onerror = () => reject(request.error);
             });
             
-            await batchFillObjectStore(db, 'data', KEYS_PER_DB, BATCH_SIZE);
+            await batchFillObjectStore(dbName, db, 'data', KEYS_PER_DB, BATCH_SIZE);
             
             db.close();
             log(` ✅ Finished ${dbName}`);
@@ -418,10 +435,7 @@
         log("Cleaning up all databases...");
         
         try {
-          // Clean up both leak test and stress test databases
-          await deleteDatabasesByPrefix(DB_NAME_PREFIX);
-          await deleteDatabasesByPrefix(STRESS_DB_PREFIX);
-          
+          await deleteAllDatabases();
           log("✅ All databases cleaned up.");
         } catch (err) {
           log(`❌ Error during cleanup: ${err}`);
