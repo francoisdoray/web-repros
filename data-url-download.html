@@ -12,13 +12,18 @@
 
       <header>
         <h1>Data URL Download</h1>
-        <p class="subtitle">100MB download via data: URL link.</p>
+        <p class="subtitle">Permanent memory usage in the browser process.</p>
       </header>
 
       <section class="repro-container">
         <p>
-          Click the button below to dynamically generate a 100MB data: URL
-          download link.
+          This repro demonstrates how downloading a file via a <code>data:</code> URL link 
+          causes a permanent memory increase in the browser process that persists even after the tab is closed.
+        </p>
+        <p>
+          1. Open the Chrome Task Manager and observe the "Browser" process memory.<br>
+          2. Click the button below to generate a 100MB <code>data:</code> URL.<br>
+          3. Once ready, click the download link and observe the browser process memory increase.
         </p>
 
         <div style="margin-top: 2rem">
@@ -70,7 +75,8 @@
             downloadLink.download = "large_repro_file.txt";
             downloadLink.style.display = "inline-block";
 
-            statusValue.innerText = "Ready";
+            statusValue.innerText = "Ready! Click the download link.";
+            statusValue.style.color = "var(--accent-color)";
             sizeValue.innerText =
               (blob.size / (1024 * 1024)).toFixed(2) + " MB";
 

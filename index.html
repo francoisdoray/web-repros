@@ -21,7 +21,7 @@
       <header>
         <h1>Chrome Performance Repros</h1>
         <p class="subtitle">
-          Minimal reproductions for debugging and performance auditing.
+          Minimal reproductions for debugging and performance analysis.
         </p>
       </header>
 
@@ -41,22 +41,6 @@
           <div class="card-footer">View Repro</div>
         </a>
 
-        <a href="dexie-leak.html" class="card">
-          <h2>Dexie Connection Leak</h2>
-          <p>
-            Leaking IndexedDB connections in the browser when creating Dexie
-            objects and not explicitly closing them
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
-        <a href="bfcache-dexie.html" class="card">
-          <h2>Dexie BFCache</h2>
-          <p>
-            Demonstrating that open IndexedDB connections don't block BFCache
-            unless there is a conflict
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
         <a href="outer-html-leak.html" class="card">
           <h2>outerHTML Memory Bloat</h2>
           <p>
@@ -76,14 +60,29 @@
         </a>
 
         <a href="audio-context-leak.html" class="card">
-          <h2>AudioContext Leak</h2>
+          <h2>AudioContext Unclosed Resources</h2>
           <p>
-            Memory leak and quick crash (OOM) due to unclosed AudioContext objects.
-            They use memory even when not explicitly retained by the page.
+            Unclosed AudioContext objects consume CPU resources even when not explicitly retained by the page.
           </p>
           <div class="card-footer">View Repro</div>
         </a>
 
+        <a href="dexie-leak.html" class="card">
+          <h2>Dexie Connection Leak</h2>
+          <p>
+            Leaking IndexedDB connections in the browser when creating Dexie
+            objects and not explicitly closing them
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
+        <a href="bfcache-dexie.html" class="card">
+          <h2>Dexie BFCache</h2>
+          <p>
+            Demonstrating that open IndexedDB connections don't block BFCache
+            unless there is a conflict
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
       </div>
     </div>
 
