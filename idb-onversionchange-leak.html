@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IndexedDB onversionchange Leak</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>IndexedDB onversionchange GC Leak</h1>
+        <p class="subtitle">
+          Attaching an <code>onversionchange</code> listener prevents the database connection from being GC'ed.
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          Opening an IndexedDB database without calling <code>.close()</code> is problematic if the code <em>also</em> attaches an <code>onversionchange</code> event listener.
+        </p>
+        <p>
+          Because <code>IDBDatabase</code> is an <code>ActiveScriptWrappable</code>, its <a href="https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/modules/indexeddb/idb_database.cc;l=622-627;drc=2be9b9fa86ff793ce11ff6cffbf05e98fe0c1b70" target="_blank" rel="noopener noreferrer"><code>HasPendingActivity()</code></a> method tells V8 that the object is still active as long as the connection isn't pending closure and has event listeners attached. This effectively roots the object in C++, preventing GC from ever reclaiming it and closing the connection (even if GC is forced in DevTools).
+        </p>
+        <p>
+          Click the buttons below to create leaked connections. Observe the memory increase for the browser process via Task Manager. Check the connections remaining open at <code>chrome://indexeddb-internals/#francoisdoray.github.io:443</code>.
+        </p>
+
+        <div class="code-snippet" style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin: 1.5rem 0; overflow-x: auto;">
+          <pre style="margin: 0; font-family: monospace;"><code>const request = window.indexedDB.open(DB_NAME, 1);
+
+request.onsuccess = (event) => {
+  const db = event.target.result;
+
+  // LEAK: As long as this remains open without db.close(),
+  // the onversionchange listener keeps the C++ object alive.
+  db.onversionchange = () => {
+    console.log("Version changed!");
+    db.close();
+  };
+};</code></pre>
+        </div>
+
+        <div style="margin-top: 2rem; display: flex; gap: 10px;">
+          <button id="singleBtn" class="btn">Leak Single Connection</button>
+          <button id="startBtn" class="btn">Start Massive Leak (100/sec)</button>
+          <button id="stopBtn" class="btn" disabled>Stop Leak</button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Connections Leaked:</span>
+            <span class="status-value" id="instanceCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusText">Ready</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      let count = 0;
+      let intervalId = null;
+      const MAX_CONNECTIONS = 100000;
+      const singleBtn = document.getElementById("singleBtn");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const instanceCountEl = document.getElementById("instanceCount");
+      const statusTextEl = document.getElementById("statusText");
+
+      const DB_NAME = 'pn_store_leak_demo';
+
+      function createLeakedConnection() {
+        if (count >= MAX_CONNECTIONS) {
+          stopLeak();
+          return;
+        }
+
+        const request = window.indexedDB.open(DB_NAME, 1);
+
+        request.onsuccess = (event) => {
+          const db = event.target.result;
+
+          db.onversionchange = () => {
+             console.log("Version changed!");
+             db.close();
+          };
+
+          count++;
+          instanceCountEl.innerText = count.toLocaleString();
+        };
+
+        request.onerror = (e) => {
+          console.error("Error opening DB:", e);
+        };
+      }
+
+      function stopLeak() {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          statusTextEl.innerText = "Leak stopped. Check Task Manager and indexeddb-internals.";
+        }
+      }
+
+      singleBtn.addEventListener("click", () => {
+        createLeakedConnection();
+        statusTextEl.innerText = "Single connection leaked.";
+      });
+
+      startBtn.addEventListener("click", () => {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        statusTextEl.innerText = "Leaking 100 connections per second...";
+        intervalId = setInterval(createLeakedConnection, 10);
+      });
+
+      stopBtn.addEventListener("click", stopLeak);
+    </script>
+  </body>
+</html>
