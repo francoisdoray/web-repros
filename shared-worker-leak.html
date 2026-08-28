@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SharedWorker BrowsingDataModel Bloat Repro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <a href="index.html" class="back-link">Back to Home</a>
+
+      <header>
+        <h1>SharedWorker BrowsingDataModel Bloat</h1>
+        <p class="subtitle">
+          Memory accumulation in the browser process via
+          PageSpecificContentSettings
+        </p>
+      </header>
+
+      <section class="repro-container">
+        <p>
+          This page connects to Shared Workers with dynamically generated names.
+          Each worker performs its handshake, closes its port, and terminates via
+          <code>self.close()</code> immediately.
+        </p>
+        <p>
+          Even though the actual Shared Worker instances are immediately destroyed,
+          the browser-side registration in <code>PageSpecificContentSettings</code>
+          and <code>BrowsingDataModel</code> is <strong>never evicted</strong> during
+          the lifetime of the page. The nested
+          <code>std::map&lt;DataOwner, std::map&lt;DataKey, DataDetails&gt;&gt;</code>
+          structures in the <strong>Browser Process</strong> accumulate unboundedly.
+        </p>
+
+        <div style="margin-top: 2rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <button id="toggleBtn" class="btn">Start Worker Loop</button>
+          <button id="step100Btn" class="btn btn-secondary">Create 100</button>
+          <button id="step1kBtn" class="btn btn-secondary">Create 1,000</button>
+        </div>
+
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="statusText">Stopped</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Workers Created:</span>
+            <span class="status-value" id="workerCount">0</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">Est. Model Overhead:</span>
+            <span class="status-value" id="estMem">0.0 MB</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const toggleBtn = document.getElementById("toggleBtn");
+      const step100Btn = document.getElementById("step100Btn");
+      const step1kBtn = document.getElementById("step1kBtn");
+      const statusText = document.getElementById("statusText");
+      const workerCountEl = document.getElementById("workerCount");
+      const estMemEl = document.getElementById("estMem");
+
+      let intervalId = null;
+      let count = 0;
+      const RATE = 400; // 400 workers per second
+
+      // Worker immediately closes its port and terminates via self.close()
+      const workerScript = `
+        self.onconnect = function(e) {
+          const port = e.ports[0];
+          port.close();
+          self.close();
+        };
+      `;
+      const workerBlob = new Blob([workerScript], { type: "application/javascript" });
+      const workerUrl = URL.createObjectURL(workerBlob);
+
+      function updateUI() {
+        workerCountEl.innerText = count.toLocaleString();
+        estMemEl.innerText = ((count * 308) / (1024 * 1024)).toFixed(2) + " MB";
+      }
+
+      function createBatch(batchSize) {
+        for (let i = 0; i < batchSize; i++) {
+          const id = count++;
+          const workerName = "w_" + id + "_" + Math.random().toString(36).slice(2, 8);
+          try {
+            const worker = new SharedWorker(workerUrl, workerName);
+            worker.port.close();
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        updateUI();
+      }
+
+      function stopLoop() {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+          toggleBtn.innerText = "Start Worker Loop";
+          toggleBtn.classList.remove("btn-secondary");
+          statusText.innerText = "Stopped";
+        }
+      }
+
+      function startLoop() {
+        toggleBtn.innerText = "Stop Worker Loop";
+        statusText.innerText = `Running (${RATE} workers / sec)`;
+        toggleBtn.classList.add("btn-secondary");
+
+        // 40 workers per 100ms = 400 workers / sec
+        const perTick = Math.round(RATE / 10);
+        intervalId = setInterval(() => {
+          createBatch(perTick);
+        }, 100);
+      }
+
+      toggleBtn.addEventListener("click", () => {
+        if (intervalId) {
+          stopLoop();
+        } else {
+          startLoop();
+        }
+      });
+
+      step100Btn.addEventListener("click", () => {
+        createBatch(100);
+      });
+
+      step1kBtn.addEventListener("click", () => {
+        createBatch(1000);
+      });
+
+      updateUI();
+    </script>
+  </body>
+</html>
