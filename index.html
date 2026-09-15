@@ -25,37 +25,11 @@
         </p>
       </header>
 
+      <h2 class="section-title">Active Repros <span class="count">4</span></h2>
       <div class="repros-grid">
-        <a href="data-url-download.html" class="card">
-          <h2>Data URL Download</h2>
-          <p>
-            Permanent memory usage in the browser process when downloading a
-            100MB file via a data: URL
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
-
         <a href="blob-leak.html" class="card">
           <h2>Large Blob</h2>
           <p>Memory usage in the browser process via a Blob</p>
-          <div class="card-footer">View Repro</div>
-        </a>
-
-        <a href="outer-html-leak.html" class="card">
-          <h2>outerHTML Memory Bloat</h2>
-          <p>
-            Memory bloat due to high-frequency outerHTML calls on a large DOM
-            without proper V8 external memory accounting
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
-
-        <a href="idb-orphan-leak.html" class="card">
-          <h2>IndexedDB Orphan Leak</h2>
-          <p>
-            Generating massive "ghost" data by race-conditions during database
-            deletion
-          </p>
           <div class="card-footer">View Repro</div>
         </a>
 
@@ -75,28 +49,44 @@
           <div class="card-footer">View Repro</div>
         </a>
 
-        <a href="dexie-leak.html" class="card">
-          <h2>Dexie Connection Leak</h2>
-          <p>
-            Leaking IndexedDB connections in the browser when creating Dexie
-            objects and not explicitly closing them
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
-        <a href="bfcache-dexie.html" class="card">
-          <h2>Dexie BFCache</h2>
-          <p>
-            Demonstrating that open IndexedDB connections don't block BFCache
-            unless there is a conflict
-          </p>
-          <div class="card-footer">View Repro</div>
-        </a>
-
         <a href="shared-worker-leak.html" class="card">
           <h2>SharedWorker Memory Bloat</h2>
           <p>
             Unbounded browser process memory bloat in BrowsingDataModel when
             accessing dynamic Shared Workers across iframes
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
+      </div>
+
+      <h2 class="section-title">Fixed / Resolved Repros <span class="count">3</span></h2>
+      <div class="repros-grid">
+        <a href="data-url-download.html" class="card">
+          <span class="badge badge-fixed">Fixed</span>
+          <h2>Data URL Download</h2>
+          <p>
+            Permanent memory usage in the browser process when downloading a
+            100MB file via a data: URL
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
+
+        <a href="outer-html-leak.html" class="card">
+          <span class="badge badge-fixed">Fixed</span>
+          <h2>outerHTML Memory Bloat</h2>
+          <p>
+            Memory bloat due to high-frequency outerHTML calls on a large DOM
+            without proper V8 external memory accounting
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
+
+        <a href="dexie-leak.html" class="card">
+          <span class="badge badge-fixed">Fixed in Library</span>
+          <h2>Dexie Connection Leak</h2>
+          <p>
+            Leaking IndexedDB connections in the browser when creating Dexie
+            objects and not explicitly closing them
           </p>
           <div class="card-footer">View Repro</div>
         </a>

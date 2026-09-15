@@ -12,6 +12,9 @@
       <a href="index.html" class="back-link">Back to Home</a>
 
       <header>
+        <div style="margin-bottom: 1rem">
+          <span class="badge badge-fixed">Addressed</span>
+        </div>
         <h1>Dexie Connection Leak</h1>
         <p class="subtitle">
           Creating Dexie objects every millisecond without closing them
@@ -20,6 +23,21 @@
       </header>
 
       <section class="repro-container">
+        <div class="info-box fixed">
+          <h3>Status: Addressed</h3>
+          <p>
+            This leak was resolved upstream in Dexie.js and is also mitigated browser-side in Chrome:
+          </p>
+          <ul>
+            <li>
+              <strong>Dexie.js fix:</strong> <a href="https://github.com/dexie/Dexie.js/pull/2250" target="_blank" rel="noopener noreferrer">Dexie PR #2250</a> (and follow-up PR #2254) stopped holding unclosed instances indefinitely in the global connections array.
+            </li>
+            <li>
+              <strong>Chrome mitigation:</strong> <a href="https://crrev.com/c/7801367" target="_blank" rel="noopener noreferrer">CL 7801367: [indexeddb] Deduplicate connections</a> reuses existing connections when possible to prevent connection flooding even when pages or libraries hold connections open (ongoing experiment).
+            </li>
+          </ul>
+        </div>
+
         <p>
           This repro creates a new Dexie instance every millisecond. These
           instances go out of JavaScript scope are still reference by Dexie's

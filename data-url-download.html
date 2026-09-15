@@ -11,14 +11,32 @@
       <a href="index.html" class="back-link">Back to Home</a>
 
       <header>
+        <div style="margin-bottom: 1rem">
+          <span class="badge badge-fixed">Fixed</span>
+        </div>
         <h1>Data URL Download</h1>
         <p class="subtitle">Permanent memory usage in the browser process.</p>
       </header>
 
       <section class="repro-container">
+        <div class="info-box fixed">
+          <h3>Status: Fixed</h3>
+          <p>
+            Fixed by Etienne Pierre-Doray (etiennep@) by truncating in-memory URL data for downloads to prevent unbounded browser memory usage:
+          </p>
+          <ul>
+            <li>
+              <a href="https://crrev.com/c/7827597" target="_blank" rel="noopener noreferrer">CL 7827597: [downloads] Truncate url data in memory</a>
+            </li>
+            <li>
+              <a href="https://crrev.com/c/8210527" target="_blank" rel="noopener noreferrer">CL 8210527: [downloads] Increase kMaxDataURLSize to 8kb</a>
+            </li>
+          </ul>
+        </div>
+
         <p>
           This repro demonstrates how downloading a file via a <code>data:</code> URL link 
-          causes a permanent memory increase in the browser process that persists even after the tab is closed.
+          previously caused a permanent memory increase in the browser process that persisted even after the tab was closed.
         </p>
         <p>
           1. Open the Chrome Task Manager and observe the "Browser" process memory.<br>
