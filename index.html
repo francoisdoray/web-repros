@@ -25,7 +25,7 @@
         </p>
       </header>
 
-      <h2 class="section-title">Active Repros <span class="count">4</span></h2>
+      <h2 class="section-title">Active Repros <span class="count">5</span></h2>
       <div class="repros-grid">
         <a href="blob-leak.html" class="card">
           <h2>Large Blob</h2>
@@ -54,6 +54,15 @@
           <p>
             Unbounded browser process memory bloat in BrowsingDataModel when
             accessing dynamic Shared Workers across iframes
+          </p>
+          <div class="card-footer">View Repro</div>
+        </a>
+
+        <a href="cross-origin-subframes-jank.html" class="card">
+          <h2>Cross-Origin Subframes Jank</h2>
+          <p>
+            Main frame jank and process storm caused by injecting 50 cross-site
+            subframes all at once using github.io.
           </p>
           <div class="card-footer">View Repro</div>
         </a>
